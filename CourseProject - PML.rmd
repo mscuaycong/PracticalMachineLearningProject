@@ -1,0 +1,204 @@
+---
+title: "Practical Machine Learning: Course Project on Prediction"
+author: "Melissa Cuaycong"
+date: "Saturday, January 30, 2016"
+output: html_document
+---
+#Title: Determining How Subjects Performed Biceps Curl Using Qualitative Activity Data
+>
+ 
+#Synopsis
+> Using the weight lifting exercises dataset, as provided by the Human Activity Recognition publications, the goal is to predict how the subjects performed the bicep curl activity, which was specified in one of 5 different fashions. (see data)
+
+#Objective
+>Predict which of the 5 different ways of performing the biceps curl (classe) the subject used.
+
+#Approach
+1. Download and read the datasets.
+2. Process the data:  perform data cleansing (handle NAs and other data errors).
+3. Perform exploratory data analysis.
+4. Perform further feature selection and remove features initially not thought to contribute to the model prediction.
+5. Model fitting/Cross Validation
+     A. Use the training set, split it into training/validation sets.
+     B. Build the model on the training set.
+4.Evaluate model on the validation set.
+     A. Estimate out of sample accuracy
+     B. Determine if accuracy is sufficiently high for the purpose.
+     
+5.Use the fitted model to predict the subject activity (classe) using the test data provided.
+
+6. Print the results - use to answer the course project assignment quiz.
+
+
+### Set global options
+```{r setup, include=TRUE, cache=TRUE}
+knitr::opts_chunk$set(echo=TRUE, cache=TRUE)
+
+library(caret)
+
+
+```
+
+#Data Processing
+
+>**Data:**  Weight Lifting Exercises Dataset
+
+Velloso, E.; Bulling, A.; Gellersen, H.; Ugulino, W.; Fuks, H. Qualitative Activity Recognition of Weight Lifting Exercises. Proceedings of 4th International Conference in Cooperation with SIGCHI (Augmented Human '13) . Stuttgart, Germany: ACM SIGCHI, 2013.
+
+
+Read more: http://groupware.les.inf.puc-rio.br/har#weight_lifting_exercises#ixzz3ympCMgMU
+
+
+>**Data Source Description:**
+> Six young health participants were asked to perform one set of 10 repetitions of the Unilateral Dumbbell Biceps Curl in five different fashions: exactly according to the specification (Class A), throwing the elbows to the front (Class B), lifting the dumbbell only halfway (Class C), lowering the dumbbell only halfway (Class D) and throwing the hips to the front (Class E).
+
+
+>**Source Link:**
+
+The training data for this project are available here:
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+
+The test data are available here:
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+Original Source:
+http://groupware.les.inf.puc-rio.br/static/WLE/WearableComputing_weight_lifting_exercises_biceps_curl_variations.csv
+
+
+>**Download Data from Source and Read**
+
+>1. Download the source training and test data files.
+```{r downloadData, cache=TRUE, eval=TRUE}
+testSource <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+testData <-"./pml-testing.csv"
+#download.file(testSource, destfile=testData)
+
+trainSource <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+trainData <- "./pml-training.csv"
+#download.file(trainSource, destfile=trainData)
+
+```
+>2. Read the comma-separated data file.
+
+```{r ReadData, cache=TRUE, eval=TRUE}
+train_raw <-read.csv(trainData, na.strings=c("NA","#DIV/0!",""))
+test_raw <-read.csv(testData, na.strings=c("NA","#DIV/0!",""))
+
+```
+
+
+##Perform data cleansing
+
+> Remove columns with NAs and errors in calculation.
+
+```{r DataProcessing, cache=TRUE, eval=TRUE}
+
+#determine which columns in train_raw have values that are all NA
+nacols <- sapply(train_raw, function(x)any(is.na(x)))
+#remove the NA columns from train_raw
+training<- train_raw[,!nacols]
+
+#determine which columns in test_raw have values that are all NA
+nacols <- sapply(test_raw, function(x)any(is.na(x)))
+#remove the NA columns from test_raw
+testing<- test_raw[,!nacols]
+
+dim(training);dim(testing)
+
+
+```
+
+
+
+#Exploratory Data Analysis and Further Pre-Processing
+
+> Perform exploratory data analysis.
+> Determine which columns (features) can be removed from the datasets - if they don't seem to contribute to predicting the class type.
+> Perform visual inspection to confirm that the features do not correlate with the other features, especially the classe variable.
+
+```{r EploratoryData, cache=TRUE, eval=TRUE}
+
+#remove columns that do not contribute to the predicting the class type
+#X is just the row number, timestamps,windows
+
+#Do a visual check of classe against the 1st 5
+pairs(training[c(60,1:5)])
+pairs(training[c(60,6:10)])   
+            
+training<-training[-(1:7)] 
+testing<- testing[-(1:7)]
+dim(training);dim(testing)
+
+```
+
+#Model Fitting and Cross Validation
+
+> 1.  Split the training dataset into training and validation. Using 70/30 split, the training dataset will be used for model fitting and tuning.
+> 2.  The validation dataset will be used to determine the performance of the model.
+
+
+```{r ModelFit, cache=TRUE, eval=TRUE}
+set.seed(90210)
+inTrain <- createDataPartition(y=training$classe,
+                               p=0.70, list=FALSE)
+trainMast <- training[inTrain,]
+trainValid <- training[-inTrain,]
+dim(trainMast) ; dim(trainValid)
+
+#fit Model
+#Start with Random Forest - 
+
+#trControl<- trainControl(method="cv", 5)
+trControl <- trainControl(method="boot", number=4, repeats=4, allowParallel = TRUE)
+#fit_RF <- train(classe ~ ., data=trainMast, method="rf", 
+#                trControl=trControl)
+#To save on processing time since the model fit is time and resource-intensive, I saved
+# the fitted model onto a file.
+#save(fit_RF,file="ModelData.RData")
+#To use, load the saved model instead of rerunning the model fit step.
+#could not get the cache option to work for the model fit... 
+#To run this code including the model fit, uncomment the fit sections and comment this
+#load.
+load("ModelData.RData")
+fit_RF
+
+```
+
+
+#Model Performance Evaluation
+
+> Use the validation dataset to evaluate the fitted model performance.
+> Calculate Out of Sample Error
+
+```{r ModelPerformance, cache=TRUE, eval=TRUE}
+predict_RF <- predict(fit_RF, trainValid)
+confusionMatrix(trainValid$classe, predict_RF)
+
+OOS_Accuracy<-confusionMatrix(trainValid$classe, predict_RF)$overall[[1]]
+OOS_Error <- 1-OOS_Accuracy
+
+OOS_Accuracy<-round(OOS_Accuracy*100,2)
+OOS_Error<-round(OOS_Error*100,2)
+
+```
+
+The model accuracy is **`r OOS_Accuracy`%** 
+
+The out of sample error is **`r OOS_Error`%**
+
+Given that the accuracy is fairly high, this is sufficient for this purpose and so we settle on this model fit.
+
+Use the fitted model to predict the outcome in the next section.
+
+#Prediction
+
+> Predict how subjects performed the activity (classe=A,B,C,D,E), given the test cases.
+
+```{r Predictions, cache=TRUE, eval=TRUE}
+#Predict on the TEST cases
+predictions_Test <- predict(fit_RF, testing)
+predictions_Test
+
+```
+
+
